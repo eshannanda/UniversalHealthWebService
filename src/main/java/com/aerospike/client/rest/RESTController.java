@@ -69,7 +69,7 @@ public class RESTController {
 	 * @return
 	 * @throws Exception
 	 */
-	@RequestMapping(value="/as/{namespace}/{set}/getAll/{key}", method=RequestMethod.GET)
+	@RequestMapping(value="/{namespace}/{set}/getAll/{key}", method=RequestMethod.GET)
 	public @ResponseBody JSONRecord getAll(@PathVariable("namespace") String namespace, @PathVariable("set") String set, @PathVariable("key") String keyvalue) throws Exception {
 
 		Policy policy = new Policy();
@@ -93,7 +93,7 @@ public class RESTController {
 	 * @return
 	 * @throws Exception
 	 */
-	@RequestMapping(value="/as/{namespace}/{set}/getHospitalId/{hostpitalId}", method=RequestMethod.GET)
+	@RequestMapping(value="/{namespace}/{set}/getClaimsByHospitalId/{hostpitalId}", method=RequestMethod.GET)
 	public @ResponseBody JSONObject departFrom(@PathVariable("namespace") String namespace, 
 			@PathVariable("set") String set, @PathVariable("hostpitalId") String hospitalId) throws Exception {
 
