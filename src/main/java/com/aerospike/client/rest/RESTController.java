@@ -58,8 +58,10 @@ public class RESTController {
 	@Autowired
 	AerospikeClient client;
 	
-	boolean dateIndexCreated = false;
+	boolean hospitalIndexCreated = false;
+	boolean procedureIndexCreated = false;
 	boolean claimPackageRefistered = false;
+	boolean groupByPackageRefistered = false;
 
 	/**
 	 * get a specific claim record via primary key
@@ -80,27 +82,25 @@ public class RESTController {
 		return new JSONRecord(record);
 	}
 	/**
-	 * Query and filter by airport date and time
-	 * This method assumes a secondary index on "FL_DATE" 
-	 * has already been created, and the package "flight-package.lua"
+	 * Query and filter by hospital Id
+	 * This method assumes a secondary index on "hospital_index" 
+	 * has already been created, and the package "claim-package.lua"
 	 * has been registered
 	 * @param namespace
 	 * @param set
 	 * @param hospitalId
 	 * @param date
-	 * @param start
-	 * @param stop
 	 * @return
 	 * @throws Exception
 	 */
 	@RequestMapping(value="/{namespace}/{set}/getClaimsByHospitalId/{hostpitalId}", method=RequestMethod.GET)
-	public @ResponseBody JSONObject departFrom(@PathVariable("namespace") String namespace, 
+	public @ResponseBody JSONObject getClaimsByHospital(@PathVariable("namespace") String namespace, 
 			@PathVariable("set") String set, @PathVariable("hostpitalId") String hospitalId) throws Exception {
 
 		/*
 		 * create the data index once
 		 */
-		if (!dateIndexCreated){
+		if (!hospitalIndexCreated){
 			/*
 			 * check if the index is created
 			 */
@@ -115,7 +115,7 @@ public class RESTController {
 				task.waitTillComplete();
 				log.debug("The index: claim_date_index created successfully");
 			}
-			dateIndexCreated = true;
+			hospitalIndexCreated = true;
 		}
 		/*
 		 * register claim package once
@@ -171,6 +171,105 @@ public class RESTController {
 			resultSet.close();
 		}
 		jo.put("Count", count);
+		jo.put("Claims", jArray);
+
+		
+		return jo;
+	}
+	
+	
+	
+	
+	/**
+	 * Query and filter by hospital Id
+	 * This method assumes a secondary index on "hospital_index" 
+	 * has already been created, and the package "claim-package.lua"
+	 * has been registered
+	 * @param namespace
+	 * @param set
+	 * @param hospitalId
+	 * @param date
+	 * @return
+	 * @throws Exception
+	 */
+	@RequestMapping(value="/{namespace}/{set}/getProcedureByHospitalId/{hostpitalId}", method=RequestMethod.GET)
+	public @ResponseBody JSONObject getCountByProcedure(@PathVariable("namespace") String namespace, 
+			@PathVariable("set") String set, @PathVariable("hostpitalId") String hospitalId) throws Exception {
+
+		/*
+		 * create the data index once
+		 */
+		if (!procedureIndexCreated){
+			/*
+			 * check if the index is created
+			 */
+			Node[] nodes = client.getNodes();
+			String infoResult = Info.request(nodes[0], "sindex");
+			/*
+			 * create if not found
+			 */
+			if (!infoResult.contains("procedure_index")){
+				log.debug("The index: procedure_index has not been created, creating now...");
+				IndexTask task = this.client.createIndex(null, namespace, set, "procedure_index", "Procedure", IndexType.STRING);
+				task.waitTillComplete();
+				log.debug("The index: procedure_index created successfully");
+			}
+			procedureIndexCreated = true;
+		}
+		/*
+		 * register claim package once
+		 */
+		if (!groupByPackageRefistered){
+			/*
+			 * check if UDF package is registered
+			 */
+			Node[] nodes = client.getNodes();
+			String udfString = Info.request(nodes[0], "udf-list");
+			
+			if (!udfString.contains("stream_udf")){
+				log.debug("claim-package.lua is not regestered, registering now...");
+				RegisterTask task = this.client.register(null, 
+						"src/main/lua/stream_udf.lua", 
+						"stream_udf.lua", 
+						Language.LUA); 
+				task.waitTillComplete();
+				log.debug("stream_udf.lua regesteration complete");
+			}
+			groupByPackageRefistered = true;
+		}
+
+		// use date format 2012-07-04 in the URL 
+		
+		QueryPolicy policy = new QueryPolicy();
+		Statement stmt = new Statement();
+		stmt.setNamespace(namespace);
+		stmt.setSetName(set);
+		stmt.setFilters(Filter.equal("Hospital", hospitalId));
+		
+		ResultSet resultSet = client.queryAggregate(null, stmt, 
+				"stream_udf", "group_count" , Value.get("Procedure"));
+
+		int count = 0;
+		JSONObject jo = new JSONObject();
+		JSONArray jArray = new JSONArray();
+		try {
+			
+			
+			while (resultSet.next()) {
+				Object object = resultSet.getObject();
+				jArray.add(object);
+				System.out.println("Result: " + object);
+				
+				count++;
+			}
+			
+			if (count == 0) {
+				System.out.println("No results returned.");			
+			}
+		}
+		finally {
+			resultSet.close();
+		}
 		jo.put("Claims", jArray);
 
 		
